@@ -25,4 +25,13 @@ async function query(text, params) {
   }
 }
 
-module.exports = { query, getConnectionsCreated };
+// For transactions
+async function getClient() {
+  const client = new Client({ connectionString: DATABASE_URL });
+  connectionsCreated++;
+  await client.connect();
+  client.release = () => client.end();
+  return client;
+}
+
+module.exports = { query, getClient, getConnectionsCreated };
