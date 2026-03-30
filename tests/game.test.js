@@ -78,6 +78,12 @@ test('Server runs migrations on startup', () => {
   assert(serverCode.includes('await migrate()'));
 });
 
+// ── Regression guards ───────────────────────────
+test('Grab: updates player score on success', () => {
+  assert(gameCode.includes('total_score = total_score + $1'), 'Must update total_score after grab');
+  assert(gameCode.includes('grabs_won = grabs_won + 1'), 'Must increment grabs_won after grab');
+});
+
 // ── Results ─────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total\n`);
 process.exit(failed > 0 ? 1 : 0);
