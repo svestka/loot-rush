@@ -8,8 +8,6 @@ RUN npm install --omit=dev
 COPY . .
 
 ENV PORT=3000
-ENV BUG_RACE_CONDITION=true
-ENV BUG_DEADLOCK=false
 
 EXPOSE 3000
 

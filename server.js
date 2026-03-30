@@ -11,8 +11,6 @@ const { seed } = require('./db/seed');
 const { migrate } = require('./db/migrate');
 const { createRound, grabItem, getLeaderboard } = require('./routes/game');
 
-const BUG_RACE_CONDITION = process.env.BUG_RACE_CONDITION !== 'false';
-const BUG_DEADLOCK = process.env.BUG_DEADLOCK !== 'false';
 const PORT = process.env.PORT || 3000;
 
 const app = express();
@@ -51,7 +49,6 @@ const COUNTDOWN_SECONDS = 8;
 const OPEN_SECONDS = 15;
 
 async function startNewRound() {
-  // Wrap round creation in a New Relic background transaction
   return newrelic.startBackgroundTransaction('game/newRound', 'GameLoop', async () => {
     const txn = newrelic.getTransaction();
     roundStatus = 'countdown';
@@ -121,7 +118,6 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw); } catch { return; }
 
     // ── Join ──
-    // Wrapped in a New Relic transaction so the DB queries show up
     if (msg.type === 'join') {
       return newrelic.startBackgroundTransaction('ws/join', 'WebSocket', async () => {
         const txn = newrelic.getTransaction();
@@ -145,12 +141,7 @@ wss.on('connection', (ws) => {
           newrelic.addCustomAttribute('playerId', player.id);
           newrelic.addCustomAttribute('playerNickname', player.nickname);
 
-          ws.send(JSON.stringify({
-            type: 'joined',
-            player,
-            bugRaceCondition: BUG_RACE_CONDITION,
-            bugDeadlock: BUG_DEADLOCK,
-          }));
+          ws.send(JSON.stringify({ type: 'joined', player }));
           broadcastOnlineCount();
           broadcast({ type: 'player_joined', nickname: player.nickname });
           log('info', 'Player joined', { nickname, playerId: player.id });
@@ -193,7 +184,6 @@ wss.on('connection', (ws) => {
     }
 
     // ── Grab ──
-    // This is the main transaction — shows the full DB call chain in New Relic
     if (msg.type === 'grab') {
       return newrelic.startBackgroundTransaction('ws/grabItem', 'WebSocket', async () => {
         const txn = newrelic.getTransaction();
@@ -315,19 +305,19 @@ wss.on('connection', (ws) => {
 
 // ── HTTP ────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', bugRaceCondition: BUG_RACE_CONDITION, bugDeadlock: BUG_DEADLOCK, online: clients.size });
+  res.json({ status: 'ok', online: clients.size });
 });
 
 // ── Startup ─────────────────────────────────────────────────────
 async function start() {
-  log('info', `LootRush starting`, { bugRaceCondition: BUG_RACE_CONDITION, bugDeadlock: BUG_DEADLOCK });
+  log('info', 'LootRush starting');
 
   // Run database migrations (creates tables if needed)
   await migrate();
   await seed();
 
   server.listen(PORT, '0.0.0.0', () => {
-    log('info', `LootRush listening on port ${PORT}`, { bugRaceCondition: BUG_RACE_CONDITION, bugDeadlock: BUG_DEADLOCK });
+    log('info', `LootRush listening on port ${PORT}`);
     setTimeout(() => startNewRound(), 2000);
   });
 }
