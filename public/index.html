@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LootRush</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e;
+    --legendary: #ff9800; --epic: #9c27b0; --rare: #2196f3;
+    --success: #2ea043; --danger: #f85149; --gold: #ffd700;
+    --deadlock: #e91e63;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100dvh; overflow-x: hidden;
+  }
+
+  /* ── Login ───────────────────────────────────── */
+  #login-screen {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 100dvh; padding: 2rem; text-align: center;
+  }
+  #login-screen h1 {
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    background: linear-gradient(135deg, var(--legendary), var(--epic));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: clamp(0.9rem, 3vw, 1.1rem); }
+  #login-screen input {
+    font-size: 16px; padding: 0.8rem 1.2rem; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    width: min(300px, 80vw); text-align: center; margin-bottom: 1rem;
+  }
+  #login-screen button {
+    padding: 0.8rem 2rem; border-radius: 8px; border: none;
+    background: linear-gradient(135deg, var(--legendary), #e65100);
+    color: white; font-size: 1.1rem; font-weight: 600; cursor: pointer;
+    width: min(300px, 80vw); transition: transform 0.1s;
+  }
+  #login-screen button:active { transform: scale(0.97); }
+
+  /* ── Game ─────────────────────────────────────── */
+  #game-screen { display: none; padding: 1rem; max-width: 600px; margin: 0 auto; }
+
+  /* ── HUD ──────────────────────────────────────── */
+  .hud {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.6rem 1rem; background: var(--surface); border-radius: 10px;
+    border: 1px solid var(--border); margin-bottom: 1rem; font-size: 0.85rem;
+    flex-wrap: wrap; gap: 0.5rem;
+  }
+  .hud-item { display: flex; align-items: center; gap: 0.4rem; }
+  .hud-label { color: var(--muted); }
+  .hud-value { font-weight: 600; }
+  #hud-score { color: var(--gold); }
+  #hud-online { color: var(--success); }
+
+  /* ── Alert Banner ─────────────────────────────── */
+  #alert-banner {
+    display: none; border-radius: 10px; padding: 0.8rem; margin-bottom: 1rem; text-align: center;
+    animation: alertPulse 0.5s ease-in-out infinite alternate;
+  }
+  #alert-banner.race_condition {
+    background: linear-gradient(90deg, #f8514920, #f8514940, #f8514920);
+    border: 2px solid var(--danger);
+  }
+  #alert-banner.deadlock {
+    background: linear-gradient(90deg, #e91e6320, #e91e6340, #e91e6320);
+    border: 2px solid var(--deadlock);
+  }
+  .alert-text { font-weight: 600; font-size: 0.9rem; }
+  .alert-count {
+    background: var(--danger); color: white; border-radius: 50%;
+    padding: 0.1rem 0.5rem; font-size: 0.75rem; font-weight: 700; margin-left: 0.5rem;
+  }
+  @keyframes alertPulse { from { opacity: 0.7; } to { opacity: 1; } }
+
+  /* ── Crate ────────────────────────────────────── */
+  .crate-area { text-align: center; margin-bottom: 1.5rem; }
+  .crate-status { font-size: clamp(1.2rem, 4vw, 1.5rem); font-weight: 700; margin-bottom: 0.5rem; }
+  .countdown-timer {
+    font-size: clamp(3rem, 12vw, 5rem); font-weight: 800;
+    color: var(--legendary); font-variant-numeric: tabular-nums;
+  }
+  .crate-box {
+    width: clamp(100px, 25vw, 150px); height: clamp(100px, 25vw, 150px);
+    margin: 1rem auto; background: var(--surface); border: 3px solid var(--border);
+    border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    font-size: clamp(3rem, 10vw, 5rem); transition: all 0.3s ease;
+  }
+  .crate-box.shaking { animation: shake 0.3s ease-in-out infinite; }
+  .crate-box.opened { border-color: var(--legendary); box-shadow: 0 0 30px rgba(255,152,0,0.3); }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px) rotate(-1deg); }
+    75% { transform: translateX(4px) rotate(1deg); }
+  }
+
+  /* ── Items ────────────────────────────────────── */
+  .loot-items { display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 1.5rem; }
+  .loot-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem; background: var(--surface); border-radius: 12px;
+    border: 2px solid var(--border); transition: all 0.3s ease;
+  }
+  .loot-item.legendary { border-color: var(--legendary); box-shadow: 0 0 15px rgba(255,152,0,0.15); }
+  .loot-item.epic { border-color: var(--epic); box-shadow: 0 0 15px rgba(156,39,176,0.15); }
+  .loot-item.rare { border-color: var(--rare); box-shadow: 0 0 15px rgba(33,150,243,0.15); }
+  .loot-item.claimed { opacity: 0.5; }
+  .loot-item.yours { border-color: var(--success); box-shadow: 0 0 20px rgba(46,160,67,0.3); opacity: 1; }
+  .item-info { display: flex; align-items: center; gap: 0.8rem; }
+  .item-icon { font-size: 1.8rem; }
+  .item-name { font-weight: 600; }
+  .item-rarity { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .item-rarity.legendary { color: var(--legendary); }
+  .item-rarity.epic { color: var(--epic); }
+  .item-rarity.rare { color: var(--rare); }
+  .grab-btn {
+    padding: 0.6rem 1.2rem; border-radius: 8px; border: none;
+    font-weight: 600; font-size: 0.9rem; cursor: pointer;
+    transition: transform 0.1s; white-space: nowrap;
+  }
+  .grab-btn:active { transform: scale(0.93); }
+  .grab-btn.available { background: linear-gradient(135deg, var(--success), #1a7f37); color: white; }
+  .grab-btn.taken { background: var(--border); color: var(--muted); cursor: default; }
+  .claimed-tag { font-size: 0.8rem; color: var(--muted); font-style: italic; }
+
+  /* ── Feed ──────────────────────────────────────── */
+  .feed {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.8rem; margin-bottom: 1.5rem; max-height: 150px; overflow-y: auto;
+  }
+  .feed h3 { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.5rem; }
+  .feed-item { font-size: 0.85rem; padding: 0.2rem 0; border-bottom: 1px solid var(--border); }
+  .feed-item:last-child { border-bottom: none; }
+
+  /* ── Leaderboard ──────────────────────────────── */
+  .leaderboard {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.8rem;
+  }
+  .leaderboard h3 { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.5rem; }
+  .lb-row {
+    display: flex; justify-content: space-between; padding: 0.4rem 0;
+    font-size: 0.85rem; border-bottom: 1px solid var(--border);
+  }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-rank { color: var(--muted); width: 2rem; }
+  .lb-name { flex: 1; }
+  .lb-score { color: var(--gold); font-weight: 600; }
+  .lb-row.me { color: var(--success); font-weight: 600; }
+
+  /* ── Toast ─────────────────────────────────────── */
+  #toast {
+    display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+    padding: 0.8rem 1.5rem; border-radius: 10px; font-weight: 600; font-size: 0.95rem;
+    z-index: 100; text-align: center; max-width: 90vw; animation: slideUp 0.3s ease;
+  }
+  #toast.success { background: var(--success); color: white; }
+  #toast.fail { background: var(--danger); color: white; }
+  #toast.race { background: #ff6f00; color: white; }
+  #toast.deadlock { background: var(--deadlock); color: white; }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Login ─────────────────────────────────────────── -->
+<div id="login-screen">
+  <h1>LootRush</h1>
+  <div class="subtitle">Grab the loot before anyone else</div>
+  <input type="text" id="nickname-input" placeholder="Enter your name" maxlength="30" autocomplete="off">
+  <button onclick="joinGame()">Enter the Arena</button>
+</div>
+
+<!-- ── Game ──────────────────────────────────────────── -->
+<div id="game-screen">
+  <div class="hud">
+    <div class="hud-item"><span class="hud-label">Player:</span> <span class="hud-value" id="hud-name">-</span></div>
+    <div class="hud-item"><span class="hud-label">Score:</span> <span class="hud-value" id="hud-score">0</span></div>
+    <div class="hud-item"><span class="hud-label">Online:</span> <span class="hud-value" id="hud-online">0</span></div>
+  </div>
+
+  <div id="alert-banner">
+    <span class="alert-text" id="alert-text"></span>
+    <span class="alert-count" id="alert-count">0</span>
+  </div>
+
+  <div class="crate-area">
+    <div class="crate-status" id="crate-status">Waiting for next drop...</div>
+    <div class="countdown-timer" id="countdown-timer"></div>
+    <div class="crate-box" id="crate-box">&#x1F4E6;</div>
+  </div>
+
+  <div class="loot-items" id="loot-items"></div>
+
+  <div class="feed" id="feed-container">
+    <h3>Live Feed</h3>
+    <div id="feed-list"></div>
+  </div>
+
+  <div class="leaderboard">
+    <h3>Leaderboard</h3>
+    <div id="leaderboard-list"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let ws, myNickname = '', myPlayerId = null, myScore = 0;
+let alertCount = 0, countdownInterval = null;
+
+const ICONS = {
+  'Dragon Sword':'\u2694\uFE0F','Phoenix Staff':'\u{1FA84}','Void Blade':'\u{1F5E1}\uFE0F',
+  'Shadow Cloak':'\u{1F9E5}','Thunder Hammer':'\u{1F528}','Frost Crown':'\u{1F451}',
+  'Crystal Shield':'\u{1F6E1}\uFE0F','Iron Gauntlets':'\u{1F9E4}','Silver Ring':'\u{1F48D}',
+  'Bronze Helmet':'\u{1FA96}','Leather Boots':'\u{1F462}','Wooden Shield':'\u{1F6E1}\uFE0F',
+};
+function icon(n) { return ICONS[n] || '\u{1F381}'; }
+
+// ── Join ──────────────────────────────────────────────
+function joinGame() {
+  const input = document.getElementById('nickname-input');
+  const nick = input.value.trim();
+  if (!nick) { input.focus(); return; }
+  myNickname = nick;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}`);
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'join', nickname: myNickname }));
+  ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(() => { if (myPlayerId) joinGame(); }, 2000);
+}
+document.getElementById('nickname-input').addEventListener('keydown', e => { if (e.key === 'Enter') joinGame(); });
+
+// ── Message Router ────────────────────────────────────
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'joined':
+      myPlayerId = msg.player.id; myScore = msg.player.total_score;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('game-screen').style.display = 'block';
+      document.getElementById('hud-name').textContent = myNickname;
+      document.getElementById('hud-score').textContent = myScore;
+      break;
+    case 'online': document.getElementById('hud-online').textContent = msg.count; break;
+    case 'player_joined': addFeed(`${msg.nickname} entered the arena`); break;
+    case 'player_left': addFeed(`${msg.nickname} left`); break;
+    case 'round_countdown': startCountdown(msg.seconds); break;
+    case 'round_open': showOpenCrate(msg.items); break;
+    case 'item_claimed': markItemClaimed(msg); break;
+    case 'grab_result': handleGrabResult(msg); break;
+    case 'round_resolved': showRoundResolved(msg); break;
+    case 'leaderboard': renderLeaderboard(msg.leaderboard); break;
+    case 'alert': showAlert(msg.message, msg.alertType); break;
+    case 'error': showToast(msg.message, 'fail'); break;
+  }
+}
+
+// ── Countdown ─────────────────────────────────────────
+function startCountdown(seconds) {
+  document.getElementById('crate-status').textContent = 'Loot drop incoming!';
+  document.getElementById('loot-items').innerHTML = '';
+  const box = document.getElementById('crate-box');
+  box.className = 'crate-box shaking'; box.innerHTML = '&#x1F4E6;';
+  let rem = seconds;
+  const timer = document.getElementById('countdown-timer');
+  timer.textContent = rem;
+  clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    rem--; timer.textContent = Math.max(0, rem);
+    if (rem <= 0) clearInterval(countdownInterval);
+  }, 1000);
+}
+
+// ── Crate Open ────────────────────────────────────────
+function showOpenCrate(items) {
+  clearInterval(countdownInterval);
+  document.getElementById('countdown-timer').textContent = '';
+  document.getElementById('crate-status').textContent = 'GRAB NOW!';
+  const box = document.getElementById('crate-box');
+  box.className = 'crate-box opened'; box.innerHTML = '&#x1F4A5;';
+  renderItems(items);
+}
+
+function renderItems(items) {
+  document.getElementById('loot-items').innerHTML = items.map(item => {
+    const claimed = item.claimed || (item.claimed_by !== null && item.claimed_by !== undefined);
+    const mine = item.claimed_by_name === myNickname;
+    let cls = `loot-item ${item.rarity}`;
+    if (claimed) cls += ' claimed'; if (mine) cls += ' yours';
+    let action;
+    if (mine) action = '<span class="claimed-tag">Yours!</span>';
+    else if (claimed) action = `<span class="claimed-tag">${item.claimed_by_name || 'Taken'}</span>`;
+    else action = `<button class="grab-btn available" onclick="grabItem(${item.id})">GRAB</button>`;
+    return `<div class="${cls}" id="item-${item.id}">
+      <div class="item-info"><span class="item-icon">${icon(item.name)}</span>
+        <div><div class="item-name">${item.name}</div>
+        <div class="item-rarity ${item.rarity}">${item.rarity} &middot; ${item.points} pts</div></div>
+      </div>${action}</div>`;
+  }).join('');
+}
+
+// ── Grab ──────────────────────────────────────────────
+function grabItem(itemId) {
+  const btn = document.querySelector(`#item-${itemId} .grab-btn`);
+  if (btn) { btn.textContent = 'Grabbing...'; btn.disabled = true; btn.className = 'grab-btn taken'; }
+  ws.send(JSON.stringify({ type: 'grab', itemId }));
+}
+
+function handleGrabResult(msg) {
+  if (msg.success) {
+    myScore += msg.item.points;
+    document.getElementById('hud-score').textContent = myScore;
+    showToast(`${msg.item.name} +${msg.item.points}pts (${msg.elapsed}ms)`, 'success');
+    addFeed(`You grabbed ${msg.item.name}!`);
+  } else if (msg.raceCondition) {
+    showToast(`RACE CONDITION! ${msg.message}`, 'race');
+  } else if (msg.deadlock) {
+    showToast(`DEADLOCK! ${msg.message}`, 'deadlock');
+  } else {
+    showToast(msg.message, 'fail');
+  }
+}
+
+function markItemClaimed(msg) {
+  const el = document.getElementById(`item-${msg.itemId}`);
+  if (!el) return;
+  const mine = msg.claimedBy === myNickname;
+  const rarity = el.className.match(/legendary|epic|rare/)?.[0] || '';
+  el.className = `loot-item ${rarity} ${mine ? 'yours' : 'claimed'}`;
+  const btn = el.querySelector('.grab-btn, .claimed-tag');
+  if (btn) btn.outerHTML = mine
+    ? '<span class="claimed-tag">Yours!</span>'
+    : `<span class="claimed-tag">${msg.claimedBy}</span>`;
+  if (!mine) addFeed(`${msg.claimedBy} grabbed ${msg.itemName} (+${msg.points})`);
+}
+
+function showRoundResolved(msg) {
+  clearInterval(countdownInterval);
+  document.getElementById('crate-status').textContent = 'Round over! Next drop soon...';
+  document.getElementById('countdown-timer').textContent = '';
+  const box = document.getElementById('crate-box');
+  box.className = 'crate-box'; box.innerHTML = '&#x1F4E6;';
+  if (msg.leaderboard) renderLeaderboard(msg.leaderboard);
+}
+
+// ── Alert ─────────────────────────────────────────────
+function showAlert(message, alertType) {
+  alertCount++;
+  const banner = document.getElementById('alert-banner');
+  banner.className = alertType || 'race_condition';
+  banner.style.display = 'block';
+  document.getElementById('alert-text').textContent = message;
+  document.getElementById('alert-count').textContent = alertCount;
+  setTimeout(() => { banner.style.display = 'none'; }, 8000);
+}
+
+// ── Feed ──────────────────────────────────────────────
+function addFeed(text) {
+  const list = document.getElementById('feed-list');
+  const div = document.createElement('div');
+  div.className = 'feed-item';
+  div.innerHTML = `<span style="color:var(--muted)">${new Date().toLocaleTimeString()}</span> ${text}`;
+  list.insertBefore(div, list.firstChild);
+  while (list.children.length > 20) list.removeChild(list.lastChild);
+}
+
+// ── Leaderboard ───────────────────────────────────────
+function renderLeaderboard(players) {
+  const list = document.getElementById('leaderboard-list');
+  if (!players?.length) { list.innerHTML = '<div style="color:var(--muted);padding:0.5rem">No players yet</div>'; return; }
+  list.innerHTML = players.map((p, i) => {
+    const me = p.nickname === myNickname;
+    const medal = i === 0 ? '\u{1F947}' : i === 1 ? '\u{1F948}' : i === 2 ? '\u{1F949}' : '';
+    return `<div class="lb-row ${me ? 'me' : ''}">
+      <span class="lb-rank">${medal || (i+1)}</span>
+      <span class="lb-name">${p.nickname}${me ? ' (you)' : ''}</span>
+      <span class="lb-score">${p.total_score} pts</span></div>`;
+  }).join('');
+}
+
+// ── Toast ─────────────────────────────────────────────
+let toastTimeout;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = type; t.style.display = 'block';
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { t.style.display = 'none'; }, 4000);
+}
+</script>
+</body>
+</html>
