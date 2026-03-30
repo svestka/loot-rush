@@ -87,6 +87,12 @@ test('Server runs migrations on startup', () => {
   assert(serverCode.includes('await migrate()'));
 });
 
+// ── Regression guards ───────────────────────────
+test('Grab: updates player score on success', () => {
+  assert(gameCode.includes('total_score = total_score + $1'), 'Must update total_score after grab');
+  assert(gameCode.includes('grabs_won = grabs_won + 1'), 'Must increment grabs_won after grab');
+});
+
 // ── Docker ──────────────────────────────────────
 test('docker-compose.yml is DB-only (no app service)', () => {
   const compose = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.yml'), 'utf8');
