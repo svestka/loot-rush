@@ -12,8 +12,8 @@ function test(name, fn) {
 
 console.log('\nLootRush structural tests\n');
 
-// ── Schema ───────────────────────────────────────
-const schema = fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8');
+// ── Schema (now in migrations) ──────────────────
+const schema = fs.readFileSync(path.join(__dirname, '..', 'db', 'migrations', '001_initial.sql'), 'utf8');
 
 test('Schema has players table', () => assert(schema.includes('CREATE TABLE IF NOT EXISTS players')));
 test('Schema has rounds table', () => assert(schema.includes('CREATE TABLE IF NOT EXISTS rounds')));
@@ -24,7 +24,15 @@ test('Indexes are commented out', () => {
   assert(schema.includes('-- CREATE INDEX idx_grab_log_round'));
 });
 
-// ── Game logic — 3 modes ─────────────────────────
+// ── Migration runner exists ─────────────────────
+test('Migration runner exists', () => {
+  const migratePath = path.join(__dirname, '..', 'db', 'migrate.js');
+  assert(fs.existsSync(migratePath), 'db/migrate.js should exist');
+  const migrateCode = fs.readFileSync(migratePath, 'utf8');
+  assert(migrateCode.includes('_migrations'), 'should track migrations in _migrations table');
+});
+
+// ── Game logic — 3 modes ────────────────────────
 const gameCode = fs.readFileSync(path.join(__dirname, '..', 'routes', 'game.js'), 'utf8');
 
 test('Has three grab functions', () => {
@@ -39,7 +47,6 @@ test('Race condition mode: SELECT without FOR UPDATE + delay', () => {
 });
 
 test('Deadlock mode: locks specific item then ALL items (FOR UPDATE)', () => {
-  // Should have a query that locks all items in the round
   assert(gameCode.includes("'SELECT id, claimed_by FROM loot_items WHERE round_id = $1 FOR UPDATE'"));
 });
 
@@ -53,8 +60,6 @@ test('Deadlock mode: catches PostgreSQL error 40P01', () => {
 
 test('Fixed mode: locks only the specific item', () => {
   assert(gameCode.includes('FOR UPDATE'));
-  // Fixed mode should NOT have the round-wide lock
-  // (verified by the function being separate)
 });
 
 test('New Relic integration present', () => {
@@ -63,13 +68,13 @@ test('New Relic integration present', () => {
   assert(gameCode.includes('newrelic.recordCustomEvent'));
 });
 
-// ── Pool ─────────────────────────────────────────
+// ── Pool ────────────────────────────────────────
 const poolCode = fs.readFileSync(path.join(__dirname, '..', 'db', 'pool.js'), 'utf8');
 
 test('Pool: buggy creates new Client per query', () => assert(poolCode.includes('new Client(')));
 test('Pool: fixed uses Pool', () => assert(poolCode.includes('new Pool(')));
 
-// ── Seed ─────────────────────────────────────────
+// ── Seed ────────────────────────────────────────
 const seedCode = fs.readFileSync(path.join(__dirname, '..', 'db', 'seed.js'), 'utf8');
 
 test('Loot pool has all rarities', () => {
@@ -78,12 +83,20 @@ test('Loot pool has all rarities', () => {
   assert(seedCode.includes("rarity: 'rare'"));
 });
 
-// ── New Relic config ─────────────────────────────
+// ── New Relic config ────────────────────────────
 const nrConfig = fs.readFileSync(path.join(__dirname, '..', 'newrelic.js'), 'utf8');
 
 test('New Relic: distributed tracing enabled', () => assert(nrConfig.includes('distributed_tracing')));
 test('New Relic: logs in context enabled', () => assert(nrConfig.includes('application_logging')));
 
-// ── Results ──────────────────────────────────────
+// ── Server imports migrate ──────────────────────
+const serverCode = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+
+test('Server runs migrations on startup', () => {
+  assert(serverCode.includes("require('./db/migrate')"), 'server.js should import migrate');
+  assert(serverCode.includes('await migrate()'), 'server.js should call migrate()');
+});
+
+// ── Results ─────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total\n`);
 process.exit(failed > 0 ? 1 : 0);

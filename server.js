@@ -8,6 +8,7 @@ const path = require('path');
 const { log } = require('./logger');
 const { query } = require('./db/pool');
 const { seed } = require('./db/seed');
+const { migrate } = require('./db/migrate');
 const { createRound, grabItem, getLeaderboard } = require('./routes/game');
 
 const BUG_RACE_CONDITION = process.env.BUG_RACE_CONDITION !== 'false';
@@ -321,12 +322,8 @@ app.get('/health', (req, res) => {
 async function start() {
   log('info', `LootRush starting`, { bugRaceCondition: BUG_RACE_CONDITION, bugDeadlock: BUG_DEADLOCK });
 
-  let retries = 20;
-  while (retries > 0) {
-    try { await query('SELECT 1'); break; }
-    catch (e) { retries--; log('info', 'Waiting for database...', { retriesLeft: retries }); await new Promise(r => setTimeout(r, 1000)); }
-  }
-
+  // Run database migrations (creates tables if needed)
+  await migrate();
   await seed();
 
   server.listen(PORT, '0.0.0.0', () => {

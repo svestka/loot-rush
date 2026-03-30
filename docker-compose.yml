@@ -1,7 +1,7 @@
-version: '3.8'
+# Local dev/test only — runs PostgreSQL for the app to connect to.
+# Usage: docker compose up -d && npm start
 
 services:
-  # ── PostgreSQL Database ─────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
@@ -12,69 +12,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-    command:
-      - "postgres"
-      - "-c"
-      - "log_statement=all"
-      - "-c"
-      - "log_duration=on"
-      - "-c"
-      - "log_lock_waits=on"
-      - "-c"
-      - "deadlock_timeout=500ms"
-      - "-c"
-      - "log_min_duration_statement=50"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U loot"]
-      interval: 2s
-      timeout: 5s
-      retries: 10
-    networks:
-      - lootnet
-
-  # ── Node.js Game Server ─────────────────────────────────────────
-  loot-app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-      - DATABASE_URL=postgres://loot:loot@postgres:5432/loot
-      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
-      - NEW_RELIC_APP_NAME=${NEW_RELIC_APP_NAME:-LootRush}
-      # Act 1: Race condition ON, Deadlock OFF
-      # Act 2: Race condition OFF, Deadlock ON
-      # Fixed: Both OFF
-      - BUG_RACE_CONDITION=${BUG_RACE_CONDITION:-true}
-      - BUG_DEADLOCK=${BUG_DEADLOCK:-false}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - lootnet
-
-  # ── pgAdmin (for showing locks & deadlocks in DB) ──────────────
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    ports:
-      - "5050:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: devops
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-    volumes:
-      - ./monitoring/pgadmin/servers.json:/pgadmin4/servers.json
-    depends_on:
-      - postgres
-    networks:
-      - lootnet
-    restart: unless-stopped
 
 volumes:
   pgdata:
-
-networks:
-  lootnet:
-    driver: bridge

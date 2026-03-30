@@ -1,4 +1,4 @@
--- LootRush schema
+-- 001_initial.sql — LootRush schema
 
 CREATE TABLE IF NOT EXISTS players (
     id SERIAL PRIMARY KEY,
