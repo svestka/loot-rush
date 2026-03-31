@@ -1,37 +1,24 @@
 // Database connection layer
-// BUG: Creates a NEW connection for every single query
-//      instead of using a connection pool. Simulates 15-40ms remote DB overhead.
+// FIXED: Uses a connection pool instead of creating a new connection per query.
 
-const { Client } = require('pg');
+const { Pool } = require('pg');
 
 const DATABASE_URL = process.env.DATABASE_URL || 'postgres://loot:loot@localhost:5432/loot';
 
-let connectionsCreated = 0;
-
-function getConnectionsCreated() {
-  return connectionsCreated;
-}
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
 
 async function query(text, params) {
-  const client = new Client({ connectionString: DATABASE_URL });
-  connectionsCreated++;
-  await client.connect();
-  // Simulate remote DB network overhead (15-40ms per connection)
-  await new Promise(r => setTimeout(r, 15 + Math.random() * 25));
-  try {
-    return await client.query(text, params);
-  } finally {
-    await client.end();
-  }
+  return pool.query(text, params);
 }
 
-// For transactions
+// For transactions — returns a client from the pool
 async function getClient() {
-  const client = new Client({ connectionString: DATABASE_URL });
-  connectionsCreated++;
-  await client.connect();
-  client.release = () => client.end();
-  return client;
+  return pool.connect();
 }
 
-module.exports = { query, getClient, getConnectionsCreated };
+module.exports = { query, getClient };
