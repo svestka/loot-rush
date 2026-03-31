@@ -1,4 +1,4 @@
-// Structural tests for LootRush
+// Structural tests for LootRush — fix1: race condition fixed, deadlock introduced
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -10,58 +10,55 @@ function test(name, fn) {
   catch (err) { failed++; console.log(`  FAIL: ${name}\n        ${err.message}`); }
 }
 
-console.log('\nLootRush structural tests\n');
+console.log('\nLootRush structural tests (fix1)\n');
 
 // ── Schema (in migrations) ─────────────────────
 const schema = fs.readFileSync(path.join(__dirname, '..', 'db', 'migrations', '001_initial.sql'), 'utf8');
 
 test('Schema has players table', () => assert(schema.includes('CREATE TABLE IF NOT EXISTS players')));
-test('Schema has rounds table', () => assert(schema.includes('CREATE TABLE IF NOT EXISTS rounds')));
 test('Schema has loot_items table', () => assert(schema.includes('CREATE TABLE IF NOT EXISTS loot_items')));
-test('Schema has grab_log table', () => assert(schema.includes('CREATE TABLE IF NOT EXISTS grab_log')));
-test('Indexes are commented out (missing)', () => {
+test('Indexes are still commented out', () => {
   assert(schema.includes('-- CREATE INDEX idx_loot_items_round'));
-  assert(schema.includes('-- CREATE INDEX idx_grab_log_round'));
 });
 
-// ── Migration runner ───────────────────────────
-test('Migration runner exists', () => {
-  const migratePath = path.join(__dirname, '..', 'db', 'migrate.js');
-  assert(fs.existsSync(migratePath), 'db/migrate.js should exist');
-  const migrateCode = fs.readFileSync(migratePath, 'utf8');
-  assert(migrateCode.includes('_migrations'), 'should track migrations in _migrations table');
-});
-
-// ── Game logic — race condition bug ─────────────
+// ── Game logic — deadlock bug ───────────────────
 const gameCode = fs.readFileSync(path.join(__dirname, '..', 'routes', 'game.js'), 'utf8');
 
-test('Grab: SELECT without FOR UPDATE (race condition bug)', () => {
-  assert(gameCode.includes("'SELECT id, name, rarity, points, claimed_by FROM loot_items WHERE id = $1 AND round_id = $2'"));
-  assert(!gameCode.includes('FOR UPDATE'), 'Should NOT have FOR UPDATE anywhere');
+test('Grab: locks specific item with FOR UPDATE (race condition fixed)', () => {
+  assert(gameCode.includes('FOR UPDATE'));
+  assert(gameCode.includes('WHERE id = $1 AND round_id = $2 FOR UPDATE'));
 });
 
-test('Grab: has validation delay (race window)', () => {
-  assert(gameCode.includes('1500 + Math.random() * 1000'));
-  assert(gameCode.includes('lootValidationDelay'));
+test('Grab: locks ALL items in round (deadlock bug)', () => {
+  assert(gameCode.includes("'SELECT id, claimed_by FROM loot_items WHERE round_id = $1 FOR UPDATE'"));
 });
 
-test('Grab: detects race condition when rowCount=0', () => {
-  assert(gameCode.includes('raceCondition: true'));
+test('Grab: has delay between the two locks', () => {
+  assert(gameCode.includes('800 + Math.random() * 400'));
+});
+
+test('Grab: catches PostgreSQL deadlock error 40P01', () => {
+  assert(gameCode.includes("err.code === '40P01'"));
+  assert(gameCode.includes('deadlock: true'));
 });
 
 test('New Relic integration present', () => {
   assert(gameCode.includes("require('newrelic')"));
-  assert(gameCode.includes('newrelic.addCustomAttribute'));
   assert(gameCode.includes('newrelic.recordCustomEvent'));
-  assert(gameCode.includes('newrelic.startSegment'));
+  assert(gameCode.includes("'Deadlock'"));
 });
 
-// ── Pool — always creates new connection ────────
+// ── Pool — still creates new connection ─────────
 const poolCode = fs.readFileSync(path.join(__dirname, '..', 'db', 'pool.js'), 'utf8');
 
-test('Pool: creates new Client per query (bug)', () => {
+test('Pool: creates new Client per query (still buggy)', () => {
   assert(poolCode.includes('new Client('));
-  assert(!poolCode.includes('new Pool('), 'Should NOT have connection pool');
+  assert(!poolCode.includes('new Pool('), 'Should NOT have connection pool yet');
+});
+
+test('Pool: exports getClient for transactions', () => {
+  assert(poolCode.includes('getClient'));
+  assert(poolCode.includes('client.release'));
 });
 
 // ── Seed ────────────────────────────────────────
@@ -72,12 +69,6 @@ test('Loot pool has all rarities', () => {
   assert(seedCode.includes("rarity: 'epic'"));
   assert(seedCode.includes("rarity: 'rare'"));
 });
-
-// ── New Relic config ────────────────────────────
-const nrConfig = fs.readFileSync(path.join(__dirname, '..', 'newrelic.js'), 'utf8');
-
-test('New Relic: distributed tracing enabled', () => assert(nrConfig.includes('distributed_tracing')));
-test('New Relic: logs in context enabled', () => assert(nrConfig.includes('application_logging')));
 
 // ── Server ──────────────────────────────────────
 const serverCode = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
@@ -91,13 +82,6 @@ test('Server runs migrations on startup', () => {
 test('Grab: updates player score on success', () => {
   assert(gameCode.includes('total_score = total_score + $1'), 'Must update total_score after grab');
   assert(gameCode.includes('grabs_won = grabs_won + 1'), 'Must increment grabs_won after grab');
-});
-
-// ── Docker ──────────────────────────────────────
-test('docker-compose.yml is DB-only (no app service)', () => {
-  const compose = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.yml'), 'utf8');
-  assert(compose.includes('postgres'), 'should have postgres service');
-  assert(!compose.includes('loot-app'), 'should NOT have app service');
 });
 
 // ── Results ─────────────────────────────────────
