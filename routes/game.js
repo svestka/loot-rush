@@ -60,6 +60,10 @@ async function grabItem(playerId, roundId, itemId) {
       'UPDATE loot_items SET claimed_by = $1, claimed_at = NOW() WHERE id = $2',
       [playerId, itemId]
     );
+    await client.query(
+      'UPDATE players SET total_score = total_score + $1, grabs_won = grabs_won + 1 WHERE id = $2',
+      [locked[0].points, playerId]
+    );
 
     await client.query('COMMIT');
 
